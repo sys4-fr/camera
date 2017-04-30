@@ -89,6 +89,9 @@ local camera = {
 	end,
 }
 
+local player_look_dir = nil
+local target_look_position = nil
+--local target_look_position = {x=-265, y=9.5, z=-126}
 
 -- [event] On step
 function camera:on_step(dtime)
@@ -104,6 +107,81 @@ function camera:on_step(dtime)
 
 	-- if record mode
 	if self.mode == 0 then
+		-- Calculate pitch and yaw if target_look_position defined
+		if target_look_position then
+			local vec_pos = vector.subtract(target_look_position, pos)
+			print("vec_pos "..dump(vec_pos))
+
+			-- Pitch
+			local opp = vec_pos.y
+			local adj = vec_pos.x
+
+			if math.abs(vec_pos.z) > math.abs(vec_pos.x) then
+				adj = vec_pos.z
+			end
+
+			if adj ~= 0 then
+				if adj > 0 then opp = opp * -1 end
+				self.driver:set_look_pitch(opp/adj)
+			end
+
+			-- Yaw
+			opp = vec_pos.x
+			adj = vec_pos.z
+
+			local yaw = opp/adj
+			
+			if math.abs(vec_pos.x) > math.abs(vec_pos.z) then
+				print("INVINVINVINVINVINVINVINVINVINV")
+				yaw = adj/opp
+				if adj < 0 and opp < 0 then
+					print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
+					yaw = yaw + math.pi/2
+				end
+				
+				if adj > 0 and opp > 0 then
+					print("++++++++++++++++++++++++++++++!!!!!!")
+					yaw = yaw + math.pi + math.pi/2
+				end
+
+				if yaw < 0 then
+					print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
+					if opp > 0 then
+						print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
+						yaw = math.pi + math.pi/2 + yaw
+					else
+						print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
+						yaw = math.pi/2 + yaw
+					end
+				end
+				
+			else
+				print("NORMNORMNORMNORMNORMNORMNORMNORMNORM!!!!!!")
+				if adj < 0 and opp < 0 then
+					print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
+					yaw = yaw - math.pi
+				end
+
+				if adj > 0 and opp > 0 then
+					print("++++++++++++++++++++++++++++++!!!!!!")
+					yaw = math.pi*2 - yaw
+				end
+				
+				if yaw < 0 then
+					print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
+					if opp > 0 then
+						print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
+						yaw = math.pi - yaw
+					else
+						print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
+						yaw = math.pi*2 - yaw
+					end
+				end
+			end
+			
+			self.driver:set_look_yaw(yaw)
+		end
+		
 		-- Update path
 		self.path[#self.path + 1] = {
 			pos = pos,
@@ -115,6 +193,12 @@ function camera:on_step(dtime)
 		-- Modify yaw and pitch to match driver (player)
 		self.object:set_look_pitch(self.driver:get_look_pitch())
 		self.object:set_look_yaw(self.driver:get_look_yaw())
+		print("look pitch "..dump(self.driver:get_look_pitch()))
+		print("look vertical "..dump(self.driver:get_look_vertical()))
+		print("look yaw "..dump(self.driver:get_look_yaw()))
+		print("look horizontal "..dump(self.driver:get_look_horizontal()))
+		print("velocity "..dump(self.object:getvelocity()))
+		print("look dir "..dump(dir))
 
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
@@ -147,7 +231,8 @@ function camera:on_step(dtime)
 		end
 
 		-- Set updated velocity
-		self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
+		--self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
+		self.object:setvelocity(vector.multiply(player_look_dir, speed))
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
@@ -225,7 +310,24 @@ minetest.register_chatcommand("camera", {
 			end
 		elseif param1 == "list" then -- elseif list, list recordings
 			return true, "Recordings: "..get_recordings(name)
+		elseif param1 == "look_target" then
+			if param2 and param2 ~= "" then
+				if param2 == "nil" then
+					target_look_position = nil
+					return true, "Target look deleted"
+				end
+				local coord = string.split(param2, ",")
+				if #coord == 3 then
+					target_look_position = {x=tonumber(coord[1]), y=tonumber(coord[2]), z=tonumber(coord[3])}
+					return true, "Target look fixed"
+				else
+					return false, "Wrong formated coords (/camera look_target <x,y,z>)"
+				end
+			else
+				return false, "Missing coords (/camera look_target <x,y,z>)"
+			end
 		else -- else, begin recording
+			player_look_dir = player:get_look_dir()
 			local object = minetest.add_entity(player:getpos(), "camera:camera")
 			object:get_luaentity():init(player, 0)
 			object:setyaw(player:get_look_yaw())
