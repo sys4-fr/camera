@@ -110,7 +110,7 @@ function camera:on_step(dtime)
 		-- Calculate pitch and yaw if target_look_position defined
 		if target_look_position then
 			local vec_pos = vector.subtract(target_look_position, pos)
-			print("vec_pos "..dump(vec_pos))
+			--print("vec_pos "..dump(vec_pos))
 
 			-- Pitch
 			local opp = vec_pos.y
@@ -132,48 +132,48 @@ function camera:on_step(dtime)
 			local yaw = opp/adj
 			
 			if math.abs(vec_pos.x) > math.abs(vec_pos.z) then
-				print("INVINVINVINVINVINVINVINVINVINV")
+				--print("INVINVINVINVINVINVINVINVINVINV")
 				yaw = adj/opp
 				if adj < 0 and opp < 0 then
-					print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
+					--print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
 					yaw = yaw + math.pi/2
 				end
 				
 				if adj > 0 and opp > 0 then
-					print("++++++++++++++++++++++++++++++!!!!!!")
+					--print("++++++++++++++++++++++++++++++!!!!!!")
 					yaw = yaw + math.pi + math.pi/2
 				end
 
 				if yaw < 0 then
-					print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
+					--print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
 					if opp > 0 then
-						print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
+						--print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
 						yaw = math.pi + math.pi/2 + yaw
 					else
-						print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
+						--print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
 						yaw = math.pi/2 + yaw
 					end
 				end
 				
 			else
-				print("NORMNORMNORMNORMNORMNORMNORMNORMNORM!!!!!!")
+				--print("NORMNORMNORMNORMNORMNORMNORMNORMNORM!!!!!!")
 				if adj < 0 and opp < 0 then
-					print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
+					--print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!")
 					yaw = yaw - math.pi
 				end
 
 				if adj > 0 and opp > 0 then
-					print("++++++++++++++++++++++++++++++!!!!!!")
+					--print("++++++++++++++++++++++++++++++!!!!!!")
 					yaw = math.pi*2 - yaw
 				end
 				
 				if yaw < 0 then
-					print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
+					--print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB!!!!!!")
 					if opp > 0 then
-						print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
+						--print("OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0 OPP>0")
 						yaw = math.pi - yaw
 					else
-						print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
+						--print("OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 OPP<0 ")
 						yaw = math.pi*2 - yaw
 					end
 				end
@@ -193,12 +193,12 @@ function camera:on_step(dtime)
 		-- Modify yaw and pitch to match driver (player)
 		self.object:set_look_pitch(self.driver:get_look_pitch())
 		self.object:set_look_yaw(self.driver:get_look_yaw())
-		print("look pitch "..dump(self.driver:get_look_pitch()))
-		print("look vertical "..dump(self.driver:get_look_vertical()))
-		print("look yaw "..dump(self.driver:get_look_yaw()))
-		print("look horizontal "..dump(self.driver:get_look_horizontal()))
-		print("velocity "..dump(self.object:getvelocity()))
-		print("look dir "..dump(dir))
+		--print("look pitch "..dump(self.driver:get_look_pitch()))
+		--print("look vertical "..dump(self.driver:get_look_vertical()))
+		--print("look yaw "..dump(self.driver:get_look_yaw()))
+		--print("look horizontal "..dump(self.driver:get_look_horizontal()))
+		--print("velocity "..dump(self.object:getvelocity()))
+		--print("look dir "..dump(dir))
 
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
