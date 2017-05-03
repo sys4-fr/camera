@@ -91,7 +91,7 @@ local camera = {
 
 local player_look_dir = nil
 local target_look_position = nil
---local target_look_position = {x=-265, y=9.5, z=-126}
+local speed_factor = 0.1 -- default speed factor
 
 -- [event] On step
 function camera:on_step(dtime)
@@ -120,10 +120,8 @@ function camera:on_step(dtime)
 				adj = vec_pos.z
 			end
 
-			if adj ~= 0 then
-				if adj > 0 then opp = opp * -1 end
-				self.driver:set_look_pitch(opp/adj)
-			end
+			if adj > 0 then opp = opp * -1 end
+			self.driver:set_look_pitch(opp/adj)
 
 			-- Yaw
 			opp = vec_pos.x
@@ -208,12 +206,12 @@ function camera:on_step(dtime)
 
 		-- if up, accelerate forward
 		if ctrl.up then
-			speed = math.min(speed + 0.1, 20)
+			speed = math.min(speed + speed_factor, 20)
 		end
 
 		-- if down, accelerate backward
 		if ctrl.down then
-			speed = math.max(speed - 0.1, -20)
+			speed = math.max(speed - speed_factor, -20)
 		end
 
 		-- if jump, brake
@@ -325,6 +323,18 @@ minetest.register_chatcommand("camera", {
 				end
 			else
 				return false, "Missing coords (/camera look_target <x,y,z>)"
+			end
+		elseif param1 == "speed" then
+			if param2 and param2 ~= "" then
+				local speed = tonumber(param2)
+				if speed then
+					speed_factor = 1/speed
+					return true, "Speed factor fixed to "..speed_factor
+				else
+					return false, "Invalid speed factor (/camera speed <number>)"
+				end
+			else
+				return false, "Missing speed parameter (/camera speed <number>)"
 			end
 		else -- else, begin recording
 			player_look_dir = player:get_look_dir()
