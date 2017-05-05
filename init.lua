@@ -123,7 +123,6 @@ function camera:on_step(dtime)
 		-- Calculate pitch and yaw if target_look_position defined
 		if target_look_position then
 			local vec_pos = vector.subtract(target_look_position, pos)
-			print("vec_pos "..dump(vec_pos))
 
 			-- Pitch
 			local opp = vec_pos.y
