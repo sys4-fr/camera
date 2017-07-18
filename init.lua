@@ -105,6 +105,8 @@ local player_look_dir = nil -- player look direction when starting record
 local target_look_position = nil -- looking target
 local speed_factor = 0.1 -- default speed factor
 local rec_mode = 0 -- record mode
+local rotate = false
+local rotate_speed = 0
 
 -- [event] On step
 function camera:on_step(dtime)
@@ -117,6 +119,7 @@ function camera:on_step(dtime)
 	local pos = self.object:getpos()
 	local vel = self.object:getvelocity()
 	local dir = self.driver:get_look_dir()
+	local cos_yaw, sin_yaw
 
 	-- if record mode
 	if self.mode == 0 or self.mode == 2 then
@@ -178,6 +181,12 @@ function camera:on_step(dtime)
 			end
 			
 			self.driver:set_look_horizontal(yaw)
+
+			-- Make velocity to rotate camera
+			if rotate then
+				cos_yaw = math.cos(yaw)
+				sin_yaw = math.sin(yaw)
+			end
 		end
 		
 		-- Update path
@@ -201,16 +210,47 @@ function camera:on_step(dtime)
 		-- if up, accelerate forward
 		if ctrl.up then
 			speed = math.min(speed + speed_factor, 20)
+			if rotate then
+				rotate_speed = math.min(rotate_speed + speed_factor, 0.8)
+			end
 		end
 
 		-- if down, accelerate backward
 		if ctrl.down then
 			speed = math.max(speed - speed_factor, -20)
+			if rotate then
+				rotate_speed = math.max(rotate_speed - speed_factor, -0.8)
+			end
 		end
 
+		-- if left, rotate to left
+		if ctrl.left and target_look_position then
+			if rotate_speed == 0 and speed >= 0 then
+				rotate = true
+				rotate_speed = math.max(-speed, -0.8)
+			end
+		end
+		
+		-- if right, rotate to right
+		if ctrl.right and target_look_position then
+			if rotate_speed == 0 and speed >= 0 then
+				rotate = true
+				rotate_speed = math.min(speed, 0.8)
+			end
+		end
+
+		-- if aux1 (aka key 'e') then stop rotate
+		if ctrl.aux1 then
+			rotate = false
+			rotate_speed = 0
+		end
+		
 		-- if jump, brake
 		if ctrl.jump then
 			speed = math.max(speed * 0.9, 0.0)
+			if rotate then
+				rotate_speed = math.max(rotate_speed * 0.9, 0.0)
+			end
 		end
 
 		-- if sneak, stop recording
@@ -226,8 +266,14 @@ function camera:on_step(dtime)
 		if self.mode == 0 then
 			self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
 		elseif self.mode == 2 then
-			self.object:setvelocity(vector.multiply(player_look_dir, speed))
+			if rotate and cos_yaw and sin_yaw then
+				local velocity = { x = self.object:getvelocity().x+cos_yaw, y = 0, z = self.object:getvelocity().z+sin_yaw}
+				self.object:setvelocity(vector.multiply(velocity, rotate_speed))
+			else
+				self.object:setvelocity(vector.multiply(player_look_dir, speed))
+			end
 		end
+
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
