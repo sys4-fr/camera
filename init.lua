@@ -12,7 +12,9 @@ Usage: /camera
 	Execute command to start recording. While recording:
 	- use up/down to accelerate/decelerate
 	- use jump to brake
-	- use crouch to stop recording
+	- use aux1 to stop recording
+	- use left/right to rotate if looking target is set
+	- use crouch to stop rotating
 	Use /camera play to play back the last recording. While playing back:
 	- use crouch to stop playing back
 	Use /camera play <name> to play a specific recording
@@ -125,67 +127,28 @@ function camera:on_step(dtime)
 	if self.mode == 0 or self.mode == 2 then
 		-- Calculate pitch and yaw if target_look_position defined
 		if target_look_position then
-			local vec_pos = vector.subtract(target_look_position, pos)
+		   local vec_pos = vector.subtract(target_look_position, pos)
 
 			-- Pitch
 			local opp = vec_pos.y
 			local adj = vec_pos.x
-
 			if math.abs(vec_pos.z) > math.abs(vec_pos.x) then
-				adj = vec_pos.z
+			   adj = vec_pos.z
 			end
-
-			self.driver:set_look_vertical(math.atan((opp*-1)/math.abs(adj)))
+			self.driver:set_look_vertical(-math.atan2(opp, math.abs(adj)))
 			
 			-- Yaw
 			opp = vec_pos.x
 			adj = vec_pos.z
-
-			local yaw = math.atan(opp/adj)
-			
-			if math.abs(vec_pos.x) > math.abs(vec_pos.z) then
-				yaw = math.atan(adj/opp)
-
-				if adj < 0 and opp < 0 then
-					yaw = yaw + math.pi/2
-				end
-				
-				if adj > 0 and opp > 0 then
-					yaw = yaw + math.pi + math.pi/2
-				end
-
-				if yaw < 0 then
-					if opp > 0 then
-						yaw = math.pi + math.pi/2 + yaw
-					else
-						yaw = math.pi/2 + yaw
-					end
-				end
-				
-			else
-				if adj < 0 and opp < 0 then
-					yaw = yaw - math.pi
-				end
-
-				if adj > 0 and opp > 0 then
-					yaw = math.pi*2 - yaw
-				end
-				
-				if yaw < 0 then
-					if opp > 0 then
-						yaw = math.pi - yaw
-					else
-						yaw = math.pi*2 - yaw
-					end
-				end
-			end
-			
+			local yaw = -math.atan2(opp,adj)
 			self.driver:set_look_horizontal(yaw)
 
 			-- Make velocity to rotate camera
 			if rotate then
 				cos_yaw = math.cos(yaw)
 				sin_yaw = math.sin(yaw)
+			else
+			   cos_yaw, sin_yaw = 0, 0
 			end
 		end
 		
@@ -193,13 +156,13 @@ function camera:on_step(dtime)
 		self.path[#self.path + 1] = {
 			pos = pos,
 			velocity = vel,
-			pitch = self.driver:get_look_pitch(),
-			yaw = self.driver:get_look_yaw()
+			pitch = self.driver:get_look_vertical(),
+			yaw = self.driver:get_look_horizontal()
 		}
 
 		-- Modify yaw and pitch to match driver (player)
-		self.object:set_look_pitch(self.driver:get_look_pitch())
-		self.object:set_look_yaw(self.driver:get_look_yaw())
+		self.object:set_look_vertical(self.driver:get_look_vertical())
+		self.object:set_look_horizontal(self.driver:get_look_horizontal())
 
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
@@ -210,70 +173,62 @@ function camera:on_step(dtime)
 		-- if up, accelerate forward
 		if ctrl.up then
 			speed = math.min(speed + speed_factor, 20)
-			if rotate then
-				rotate_speed = math.min(rotate_speed + speed_factor, 0.8)
-			end
 		end
 
 		-- if down, accelerate backward
 		if ctrl.down then
 			speed = math.max(speed - speed_factor, -20)
-			if rotate then
-				rotate_speed = math.max(rotate_speed - speed_factor, -0.8)
-			end
-		end
-
-		-- if left, rotate to left
-		if ctrl.left and target_look_position then
-			if rotate_speed == 0 and speed >= 0 then
-				rotate = true
-				rotate_speed = math.max(-speed, -0.8)
-			end
 		end
 		
-		-- if right, rotate to right
 		if ctrl.right and target_look_position then
-			if rotate_speed == 0 and speed >= 0 then
-				rotate = true
-				rotate_speed = math.min(speed, 0.8)
-			end
-		end
-
-		-- if aux1 (aka key 'e') then stop rotate
-		if ctrl.aux1 then
-			rotate = false
-			rotate_speed = 0
+		   rotate = true
+		   rotate_speed = math.min(rotate_speed + speed_factor, 0.5)
 		end
 		
-		-- if jump, brake
-		if ctrl.jump then
-			speed = math.max(speed * 0.9, 0.0)
-			if rotate then
-				rotate_speed = math.max(rotate_speed * 0.9, 0.0)
-			end
+		if ctrl.left and target_look_position then
+		   rotate = true
+		   rotate_speed = math.max(rotate_speed - speed_factor, -1)
 		end
 
-		-- if sneak, stop recording
-		if ctrl.sneak then
+		-- if aux1 (aka key 'e') then stop recording
+		if ctrl.aux1 then
 			self.driver:set_detach()
 			minetest.chat_send_player(self.driver:get_player_name(), "Recorded stopped after " .. #self.path .. " points")
 			temp[self.driver:get_player_name()] = table.copy(self.path)
 			self.object:remove()
 			return
 		end
+		
+		-- if jump, brake
+		if ctrl.jump then
+			speed = math.max(speed * 0.5, 0.0)
+			rotate_speed = math.max(speed * 0.5, 0.0)
+		end
+
+		-- if sneak, stop rotating
+		if ctrl.sneak then
+		   rotate = false
+		   rotate_speed = 0
+		end
 
 		-- Set updated velocity
 		if self.mode == 0 then
 			self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
 		elseif self.mode == 2 then
-			if rotate and cos_yaw and sin_yaw then
-				local velocity = { x = self.object:getvelocity().x+cos_yaw, y = 0, z = self.object:getvelocity().z+sin_yaw}
-				self.object:setvelocity(vector.multiply(velocity, rotate_speed))
-			else
-				self.object:setvelocity(vector.multiply(player_look_dir, speed))
-			end
+		   if rotate then
+		      self.object:setvelocity(
+					vector.multiply(
+						{
+							x = self.object:get_velocity().x+cos_yaw,
+							y = 0,
+							z = self.object:get_velocity().z+sin_yaw
+						}
+						, rotate_speed))
+		   else
+		      self.object:setvelocity(vector.multiply(player_look_dir, speed))
+		   end
 		end
-
+		
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
@@ -289,8 +244,8 @@ function camera:on_step(dtime)
 		-- Update position
 		self.object:moveto(self.path[1].pos, true)
 		-- Update yaw/pitch
-		self.driver:set_look_yaw(self.path[1].yaw - (math.pi/2))
-		self.driver:set_look_pitch(0 - self.path[1].pitch)
+		self.driver:set_look_horizontal(self.path[1].yaw)
+		self.driver:set_look_vertical(self.path[1].pitch)
 		-- Update velocity
 		self.object:setvelocity(self.path[1].velocity)
 		-- Remove path table
@@ -309,12 +264,12 @@ minetest.register_chatcommand("camera", {
 		local player = minetest.get_player_by_name(name)
 		local param1, param2 = param:split(" ")[1], param:split(" ")[2]
 
-		-- if play, begin playback preperation
+		-- if play, begin playback preparation
 		if param1 == "play" then
 			local function play(path)
 				local object = minetest.add_entity(player:getpos(), "camera:camera")
 				object:get_luaentity():init(player, 1)
-				object:setyaw(player:get_look_yaw())
+				object:setyaw(player:get_look_horizontal())
 				player:set_attach(object, "", {x=5,y=10,z=0}, {x=0,y=0,z=0})
 				object:get_luaentity().path = path
 			end
@@ -402,7 +357,7 @@ minetest.register_chatcommand("camera", {
 			player_look_dir = player:get_look_dir()
 			local object = minetest.add_entity(player:getpos(), "camera:camera")
 			object:get_luaentity():init(player, rec_mode)
-			object:setyaw(player:get_look_yaw())
+			object:setyaw(player:get_look_horizontal())
 			player:set_attach(object, "", {x=0,y=10,z=0}, {x=0,y=0,z=0})
 			return true, "Recording started"
 		end
