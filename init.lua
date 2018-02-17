@@ -108,6 +108,7 @@ local camera = {
 		self.mode = mode
 		self.path = {}
 		self.look_dir_init = player:get_look_dir()
+		self.speed = 0
 	end,
 }
 
@@ -160,7 +161,8 @@ function camera:on_step(dtime)
 		local ctrl = self.driver:get_player_control()
 
 		-- Initialize speed
-		local speed = vector.distance(vector.new(), vel)
+		--local speed = vector.distance(vector.new(), vel)
+		local speed = self.speed
 
 		-- if up, accelerate forward
 		if ctrl.up then
@@ -197,12 +199,14 @@ function camera:on_step(dtime)
 		if ctrl.right and params.look_target then
 			params.rotate = true
 			params.rotate_speed = math.min((params.rotate_speed or 0.0) + (params.speed_step or 0.1), 0.5)
+			speed = 0
 		end
 		
 		-- if left, accelerate rotation to left
 		if ctrl.left and params.look_target then
 			params.rotate = true
 			params.rotate_speed = math.max((params.rotate_speed or 0.0) - (params.speed_step or 0.1), -1)
+			speed = 0
 		end
 		
 		-- Set updated velocity
@@ -210,17 +214,22 @@ function camera:on_step(dtime)
 			self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
 		elseif self.mode == 2 then
 			if params.rotate then
-				self.object:setvelocity(
-					vector.multiply(
-						{
-							x = self.object:get_velocity().x + math.cos(self.driver:get_look_horizontal()),
-							y = 0,
-							z = self.object:get_velocity().z + math.sin(self.driver:get_look_horizontal())
-						}, params.rotate_speed))
+				local rvelocity = {
+					x = self.object:get_velocity().x + math.cos(self.driver:get_look_horizontal()),
+					y = speed,
+					z = self.object:get_velocity().z + math.sin(self.driver:get_look_horizontal())
+				}
+				local v_rspeed = {
+					x = params.rotate_speed,
+					y = 1,
+					z = params.rotate_speed
+				}
+				self.object:setvelocity(vector.multiply(rvelocity, v_rspeed))
 			else
 				self.object:setvelocity(vector.multiply(self.look_dir_init, speed))
 			end
 		end
+		self.speed = speed
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
@@ -342,6 +351,9 @@ minetest.register_chatcommand("camera", {
 				local mode = tonumber(param2)
 				if mode == 0 or mode == 2 then
 					get_player_params(name).mode = mode
+					if mode == 0 then
+						get_player_params(name).look_target = nil
+					end
 					return true, "Record mode is set"
 				else return false, "Invalid mode (0: Velocity follow mouse (default), 2: Velocity locked to player first look direction)"
 				end
