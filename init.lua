@@ -261,7 +261,7 @@ minetest.register_chatcommand("camera", {
 			local function play(path)
 				local object = minetest.add_entity(player:getpos(), "camera:camera")
 				object:get_luaentity():init(player, 1)
-				object:setyaw(player:get_look_yaw())
+				object:setyaw(player:get_look_horizontal())
 				player:set_attach(object, "", {x=5,y=10,z=0}, {x=0,y=0,z=0})
 				object:get_luaentity().path = path
 			end
@@ -324,7 +324,7 @@ minetest.register_chatcommand("camera", {
 					end
 				end
 			else
-				return false, "Parameters of looking target are missing (/camera look <nil|here|x,y,z)"
+				return false, "Parameters of looking target are missing (/camera look <nil|here|x,y,z>)"
 			end
 		elseif param1 == "speed" then
 			if param2 and param ~= "" then
