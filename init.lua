@@ -1,10 +1,7 @@
-
 --[[
-
 Copyright 2016-2017 - Auke Kok <sofar@foo-projects.org>
 Copyright 2017 - Elijah Duffy <theoctacian@gmail.com>
 Copyright 2017 - sys4 <sys4@free.fr>
-
 License:
 	- Code: MIT
 	- Models and textures: CC-BY-SA-3.0
@@ -16,7 +13,7 @@ Usage: /camera
 	- use left/right to rotate if looking target is set
 	- use crouch to stop rotating
 	Use /camera play to play back the last recording. While playing back:
-	- use crouch to stop playing back
+	- use aux1 to stop playing back
 	Use /camera play <name> to play a specific recording
 	Use /camera save <name> to save the last recording
 	- saved recordings exist through game restarts
@@ -78,12 +75,22 @@ minetest.register_on_shutdown(save)
 -- Table for storing unsaved temporary recordings
 local temp = {}
 
+-- Table and functions for storing params per players
+local player_params = {}
+
+local function get_player_params(playern)
+	if not player_params[playern] then
+		player_params[playern] = {}
+	end
+
+	return player_params[playern]
+end
+
 -- Camera definition
 local camera = {
 	description = "Camera",
 	visual = "wielditem",
 	textures = {},
-	physical = false,
 	is_visible = false,
 	collide_with_objects = false,
 	collisionbox = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
@@ -100,15 +107,10 @@ local camera = {
 		self.driver = player
 		self.mode = mode
 		self.path = {}
+		self.look_dir_init = player:get_look_dir()
 	end,
 }
 
-local player_look_dir = nil -- player look direction when starting record
-local target_look_position = nil -- looking target
-local speed_factor = 0.1 -- default speed factor
-local rec_mode = 0 -- record mode
-local rotate = false
-local rotate_speed = 0
 
 -- [event] On step
 function camera:on_step(dtime)
@@ -120,36 +122,24 @@ function camera:on_step(dtime)
 
 	local pos = self.object:getpos()
 	local vel = self.object:getvelocity()
-	local dir = self.driver:get_look_dir()
-	local cos_yaw, sin_yaw
 
 	-- if record mode
 	if self.mode == 0 or self.mode == 2 then
-		-- Calculate pitch and yaw if target_look_position defined
-		if target_look_position then
-		   local vec_pos = vector.subtract(target_look_position, pos)
+		-- Calculate pitch and yaw if look target of player is defined
+		local look_target = player_params[self.driver:get_player_name()].look_target
+
+		if look_target then
+			local vec_pos = vector.subtract(look_target, pos)
 
 			-- Pitch
-			local opp = vec_pos.y
-			local adj = vec_pos.x
 			if math.abs(vec_pos.z) > math.abs(vec_pos.x) then
-			   adj = vec_pos.z
-			end
-			self.driver:set_look_vertical(-math.atan2(opp, math.abs(adj)))
-			
-			-- Yaw
-			opp = vec_pos.x
-			adj = vec_pos.z
-			local yaw = -math.atan2(opp,adj)
-			self.driver:set_look_horizontal(yaw)
-
-			-- Make velocity to rotate camera
-			if rotate then
-				cos_yaw = math.cos(yaw)
-				sin_yaw = math.sin(yaw)
+				self.driver:set_look_vertical(-math.atan2(vec_pos.y, math.abs(vec_pos.z)))
 			else
-			   cos_yaw, sin_yaw = 0, 0
+				self.driver:set_look_vertical(-math.atan2(vec_pos.y, math.abs(vec_pos.x)))
 			end
+
+			-- Yaw
+			self.driver:set_look_horizontal(-math.atan2(vec_pos.x, vec_pos.z))
 		end
 		
 		-- Update path
@@ -164,6 +154,8 @@ function camera:on_step(dtime)
 		self.object:set_look_vertical(self.driver:get_look_vertical())
 		self.object:set_look_horizontal(self.driver:get_look_horizontal())
 
+		local params = get_player_params(self.driver:get_player_name())
+
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
 
@@ -172,25 +164,21 @@ function camera:on_step(dtime)
 
 		-- if up, accelerate forward
 		if ctrl.up then
-			speed = math.min(speed + speed_factor, 20)
+			speed = math.min(speed + (params.speed_step or 0.1), 20)
 		end
 
 		-- if down, accelerate backward
 		if ctrl.down then
-			speed = math.max(speed - speed_factor, -20)
-		end
-		
-		if ctrl.right and target_look_position then
-		   rotate = true
-		   rotate_speed = math.min(rotate_speed + speed_factor, 0.5)
-		end
-		
-		if ctrl.left and target_look_position then
-		   rotate = true
-		   rotate_speed = math.max(rotate_speed - speed_factor, -1)
+			speed = math.max(speed - (params.speed_step or 0.1), -20)
 		end
 
-		-- if aux1 (aka key 'e') then stop recording
+		-- if jump, brake
+		if ctrl.jump then
+			speed = math.max(speed * 0.9, 0.0)
+			params.rotate_speed = math.max((params.rotate_speed or 0) * 0.9, 0.0)
+		end
+
+		-- if aux1 (aka key 'e'), stop recording
 		if ctrl.aux1 then
 			self.driver:set_detach()
 			minetest.chat_send_player(self.driver:get_player_name(), "Recorded stopped after " .. #self.path .. " points")
@@ -198,43 +186,47 @@ function camera:on_step(dtime)
 			self.object:remove()
 			return
 		end
-		
-		-- if jump, brake
-		if ctrl.jump then
-			speed = math.max(speed * 0.5, 0.0)
-			rotate_speed = math.max(speed * 0.5, 0.0)
-		end
 
-		-- if sneak, stop rotating
+		-- if sneak, stop rotation
 		if ctrl.sneak then
-		   rotate = false
-		   rotate_speed = 0
+			params.rotate = false
+			params.rotate_speed = 0.0
 		end
 
+		-- if right, accelerate rotation to right
+		if ctrl.right and params.look_target then
+			params.rotate = true
+			params.rotate_speed = math.min((params.rotate_speed or 0.0) + (params.speed_step or 0.1), 0.5)
+		end
+		
+		-- if left, accelerate rotation to left
+		if ctrl.left and params.look_target then
+			params.rotate = true
+			params.rotate_speed = math.max((params.rotate_speed or 0.0) - (params.speed_step or 0.1), -1)
+		end
+		
 		-- Set updated velocity
 		if self.mode == 0 then
 			self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
 		elseif self.mode == 2 then
-		   if rotate then
-		      self.object:setvelocity(
+			if params.rotate then
+				self.object:setvelocity(
 					vector.multiply(
 						{
-							x = self.object:get_velocity().x+cos_yaw,
+							x = self.object:get_velocity().x + math.cos(self.driver:get_look_horizontal()),
 							y = 0,
-							z = self.object:get_velocity().z+sin_yaw
-						}
-						, rotate_speed))
-		   else
-		      self.object:setvelocity(vector.multiply(player_look_dir, speed))
-		   end
+							z = self.object:get_velocity().z + math.sin(self.driver:get_look_horizontal())
+						}, params.rotate_speed))
+			else
+				self.object:setvelocity(vector.multiply(self.look_dir_init, speed))
+			end
 		end
-		
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
 		local ctrl = self.driver:get_player_control()
 
-		-- if sneak or no path, stop playback
-		if ctrl.sneak or #self.path < 1 then
+		-- if aux1 or no path, stop playback
+		if ctrl.aux1 or #self.path < 1 then
 			self.driver:set_detach()
 			minetest.chat_send_player(self.driver:get_player_name(), "Playback stopped")
 			self.object:remove()
@@ -264,12 +256,12 @@ minetest.register_chatcommand("camera", {
 		local player = minetest.get_player_by_name(name)
 		local param1, param2 = param:split(" ")[1], param:split(" ")[2]
 
-		-- if play, begin playback preparation
+		-- if play, begin playback preperation
 		if param1 == "play" then
 			local function play(path)
 				local object = minetest.add_entity(player:getpos(), "camera:camera")
 				object:get_luaentity():init(player, 1)
-				object:setyaw(player:get_look_horizontal())
+				object:setyaw(player:get_look_yaw())
 				player:set_attach(object, "", {x=5,y=10,z=0}, {x=0,y=0,z=0})
 				object:get_luaentity().path = path
 			end
@@ -309,54 +301,81 @@ minetest.register_chatcommand("camera", {
 		elseif param1 == "look" then
 			if param2 and param2 ~= "" then
 				if param2 == "nil" then
-					target_look_position = nil
+					get_player_params(name).look_target = nil
 					return true, "Looking target removed"
 				elseif param2 == "here" then
-					rec_mode = 2
-					target_look_position = player:getpos()
+					local player_params = get_player_params(name)
+					player_params.mode = 2
+					player_params.look_target = player:getpos()
 					return true, "Looking target fixed"
 				else
-					local coord = string.split(param2, ",")
-					if #coord == 3 then
-						target_look_position = {x=tonumber(coord[1]), y=tonumber(coord[2]), z=tonumber(coord[3])}
-						rec_mode = 2
+					local look_target = string.split(param2, ",")
+					if #look_target == 3 then
+						local player_params = get_player_params(name)
+						player_params.mode = 2
+						player_params.look_target =
+							{ x = tonumber(look_target[1]),
+							  y = tonumber(look_target[2]),
+							  z = tonumber(look_target[3])
+							}
 						return true, "Looking target fixed"
 					else
-						return false, "Wrong formated look coords (/camera look <x,y,z>)"
+						return false, "Looking target wrong format (/camera look <x,y,z>)"
 					end
 				end
 			else
-				return false, "Missing look parameter (/camera look <nil|here|x,y,z>)"
+				return false, "Parameters of looking target are missing (/camera look <nil|here|x,y,z)"
 			end
 		elseif param1 == "speed" then
-			if param2 and param2 ~= "" then
+			if param2 and param ~= "" then
 				local speed = tonumber(param2)
 				if speed then
-					speed_factor = 1/speed
-					return true, "Speed factor fixed to "..speed_factor
+					get_player_params(name).speed_step = 1/speed
+					return true, "Speed step fixed to "..get_player_params(name).speed_step
 				else
-					return false, "Invalid speed factor (/camera speed <number>)"
+					return false, "Invalid speed step (/camera speed <number>)"
 				end
-			else
-				return false, "Missing speed parameter (/camera speed <number>)"
+			else return false, "Missing speed step parameter (/camera speed <number>)"
 			end
 		elseif param1 == "mode" then
 			if param2 and param2 ~= "" then
 				local mode = tonumber(param2)
 				if mode == 0 or mode == 2 then
-					rec_mode = mode
+					get_player_params(name).mode = mode
 					return true, "Record mode is set"
-				else
-					return false, "Invalid mode (0: Velocity follow mouse (default), 2: Velocity locked to player first look direction)"
+				else return false, "Invalid mode (0: Velocity follow mouse (default), 2: Velocity locked to player first look direction)"
 				end
-			else
-				return false, "Missing mode parameter (/camera mode <0|2>)"
+			else return false, "Missing mod parameter (/camera mode <0|2>)"
 			end
-					
+		elseif param1 == "help" then
+			local str = "Usage: /camera\n"..
+				"Execute command to start recording. While recording:\n"..
+				"- use up/down to accelerate/decelerate\n"..
+				"- use jump to brake\n"..
+				"- use aux1 to stop recording\n"..
+			"- use left/right to rotate if looking target is set\n"..
+				"- use crouch to stop rotating\n"..
+				"Use /camera play to play back the last recording. While playing back:\n"..
+				"- use aux1 to stop playing back\n"..
+				"Use /camera play <name> to play a specific recording\n"..
+				"Use /camera save <name> to save the last recording\n"..
+				"- saved recordings exist through game restarts\n"..
+				"Use /camera list to show all saved recording\n"..
+				"Use /camera mode <0|2> to change the velocity behaviour\n"..
+				"- 0: Velocity follow mouse (default),\n"..
+				"- 2: Velocity locked to player's first look direction with released mouse\n"..
+				"Use /camera look <nil|here|x,y,z>\n"..
+				"- nil: remove looking target,\n"..
+				"- here: set looking target to player position,\n"..
+				"- x,y,z: Coords to look at\n"..
+				"Use /camera speed <speed>\n"..
+				"- 10 is default speed,\n"..
+				"- > 10 decrease speed factor,\n"..
+				"- < 10 increase speed factor"
+			return true, str
 		else -- else, begin recording
-			player_look_dir = player:get_look_dir()
 			local object = minetest.add_entity(player:getpos(), "camera:camera")
-			object:get_luaentity():init(player, rec_mode)
+			object:get_luaentity():init(player, get_player_params(name).mode)
 			object:setyaw(player:get_look_horizontal())
 			player:set_attach(object, "", {x=0,y=10,z=0}, {x=0,y=0,z=0})
 			return true, "Recording started"
