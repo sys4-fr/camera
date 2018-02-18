@@ -6,8 +6,10 @@ License:
 	- Code: MIT
 	- Models and textures: CC-BY-SA-3.0
 Usage: /camera
-	Execute command to start recording. While recording:
+	Execute command to start recording. 
+	While recording:
 	- use up/down to accelerate/decelerate
+	  - when rotating (mode 2 or 3) the camera up or down on Y axis
 	- use jump to brake
 	- use aux1 to stop recording
 	- use left/right to rotate if looking target is set
@@ -18,9 +20,10 @@ Usage: /camera
 	Use /camera save <name> to save the last recording
 	- saved recordings exist through game restarts
 	Use /camera list to show all saved recording
-	Use /camera mode <0|2> to change the velocity behaviour 
+	Use /camera mode <0|2|3> to change the velocity behaviour 
 	- 0: Velocity follow mouse (default),
 	- 2: Velocity locked to player's first look direction with released mouse
+	- 3: Same that 2 but if you up or down when rotating then looking target will up or down too
 	Use /camera look <nil|here|x,y,z>
 	- nil: remove looking target,
 	- here: set looking target to player position,
@@ -123,9 +126,9 @@ function camera:on_step(dtime)
 
 	local pos = self.object:getpos()
 	local vel = self.object:getvelocity()
-
+	
 	-- if record mode
-	if self.mode == 0 or self.mode == 2 then
+	if self.mode == 0 or self.mode > 1 then
 		-- Calculate pitch and yaw if look target of player is defined
 		local look_target = player_params[self.driver:get_player_name()].look_target
 
@@ -210,25 +213,46 @@ function camera:on_step(dtime)
 		end
 		
 		-- Set updated velocity
+
+		-- Normal Velocity mode
 		if self.mode == 0 then
 			self.object:setvelocity(vector.multiply(self.driver:get_look_dir(), speed))
-		elseif self.mode == 2 then
+		elseif self.mode > 1 then
+
+			-- Rotation Velocity mode
 			if params.rotate then
-				local rvelocity = {
-					x = self.object:get_velocity().x + math.cos(self.driver:get_look_horizontal()),
-					y = speed,
-					z = self.object:get_velocity().z + math.sin(self.driver:get_look_horizontal())
-				}
-				local v_rspeed = {
-					x = params.rotate_speed,
-					y = 1,
-					z = params.rotate_speed
-				}
-				self.object:setvelocity(vector.multiply(rvelocity, v_rspeed))
+				self.object:setvelocity(
+					vector.multiply(
+						{
+							x = self.object:get_velocity().x + math.cos(self.driver:get_look_horizontal()),
+							y = speed,
+							z = self.object:get_velocity().z + math.sin(self.driver:get_look_horizontal())
+						},
+						{
+							x = params.rotate_speed,
+							y = 1,
+							z = params.rotate_speed
+						}
+					))
+
+				-- First step (old_pos = pos)
+				if not self.old_pos then self.old_pos = pos end
+
+				-- if mode 3 then look target up or down at the same time of the camera during rotation
+				if self.mode == 3 then
+					look_target.y = look_target.y + (pos.y - self.old_pos.y)
+					player_params[self.driver:get_player_name()].look_target = look_target
+
+					-- memorize pos as old_pos for next steps
+					self.old_pos = pos
+				end
 			else
+				-- Looking target Velocity mode
 				self.object:setvelocity(vector.multiply(self.look_dir_init, speed))
 			end
 		end
+
+		-- memorize speed for next step
 		self.speed = speed
 	elseif self.mode == 1 then -- elseif playback mode
 		-- Get controls
@@ -314,7 +338,9 @@ minetest.register_chatcommand("camera", {
 					return true, "Looking target removed"
 				elseif param2 == "here" then
 					local player_params = get_player_params(name)
-					player_params.mode = 2
+					if (not player_params.mode) then
+						player_params.mode = 2
+					end
 					player_params.look_target = player:getpos()
 					return true, "Looking target fixed"
 				else
@@ -349,7 +375,7 @@ minetest.register_chatcommand("camera", {
 		elseif param1 == "mode" then
 			if param2 and param2 ~= "" then
 				local mode = tonumber(param2)
-				if mode == 0 or mode == 2 then
+				if mode == 0 or mode == 2 or mode == 3 then
 					get_player_params(name).mode = mode
 					if mode == 0 then
 						get_player_params(name).look_target = nil
@@ -361,8 +387,10 @@ minetest.register_chatcommand("camera", {
 			end
 		elseif param1 == "help" then
 			local str = "Usage: /camera\n"..
-				"Execute command to start recording. While recording:\n"..
+				"Execute command to start recording.\n"..
+				"While recording:\n"..
 				"- use up/down to accelerate/decelerate\n"..
+				"  - when rotating (mode 2 or 3) the camera up or down on Y axis\n"..
 				"- use jump to brake\n"..
 				"- use aux1 to stop recording\n"..
 			"- use left/right to rotate if looking target is set\n"..
@@ -373,9 +401,10 @@ minetest.register_chatcommand("camera", {
 				"Use /camera save <name> to save the last recording\n"..
 				"- saved recordings exist through game restarts\n"..
 				"Use /camera list to show all saved recording\n"..
-				"Use /camera mode <0|2> to change the velocity behaviour\n"..
+				"Use /camera mode <0|2|3> to change the velocity behaviour\n"..
 				"- 0: Velocity follow mouse (default),\n"..
 				"- 2: Velocity locked to player's first look direction with released mouse\n"..
+				"- 3: Same that 2 but if you up or down when rotating then looking target will up or down too\n"..
 				"Use /camera look <nil|here|x,y,z>\n"..
 				"- nil: remove looking target,\n"..
 				"- here: set looking target to player position,\n"..
