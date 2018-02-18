@@ -235,11 +235,12 @@ function camera:on_step(dtime)
 						}
 					))
 
-				-- First step (old_pos = pos)
-				if not self.old_pos then self.old_pos = pos end
-
 				-- if mode 3 then look target up or down at the same time of the camera during rotation
 				if self.mode == 3 then
+
+					-- First step (old_pos = pos)
+					if not self.old_pos then self.old_pos = pos end
+
 					look_target.y = look_target.y + (pos.y - self.old_pos.y)
 					player_params[self.driver:get_player_name()].look_target = look_target
 
@@ -375,15 +376,15 @@ minetest.register_chatcommand("camera", {
 		elseif param1 == "mode" then
 			if param2 and param2 ~= "" then
 				local mode = tonumber(param2)
-				if mode == 0 or mode == 2 or mode == 3 then
+				if mode == 0 or mode > 1 then
 					get_player_params(name).mode = mode
 					if mode == 0 then
 						get_player_params(name).look_target = nil
 					end
 					return true, "Record mode is set"
-				else return false, "Invalid mode (0: Velocity follow mouse (default), 2: Velocity locked to player first look direction)"
+				else return false, "Invalid mode (0: Velocity follow mouse (default), 2: Velocity locked to player first look direction, 3: Same as 2 but looking target can up/down when rotating)"
 				end
-			else return false, "Missing mod parameter (/camera mode <0|2>)"
+			else return false, "Missing mod parameter (/camera mode <0|2|3>)"
 			end
 		elseif param1 == "help" then
 			local str = "Usage: /camera\n"..
